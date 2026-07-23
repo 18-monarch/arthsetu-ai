@@ -14,7 +14,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "engines": {
-    "node": ">=20.9.0"
+    "node": "20.x"
   },
   "dependencies": {
     "@neondatabase/auth": "latest",
