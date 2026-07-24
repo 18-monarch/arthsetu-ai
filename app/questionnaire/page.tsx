@@ -17,7 +17,7 @@ export default function QuestionnairePage() {
       <main className="q-page-main">
         <div className="q-page-intro">
           <h1>Discover Your SetuScore</h1>
-          <p>Answer 20 quick questions about your income, spending, bill payments, and digital activity. We will train an ML model on your responses and give you a personalized score with actionable improvement tips.</p>
+          <p>Answer 20 quick questions about your income, spending, bill payments, and digital activity. Our trained model will analyse your responses and return a personalised score, visible drivers and practical improvement actions.</p>
         </div>
         <QuestionnaireClient />
       </main>

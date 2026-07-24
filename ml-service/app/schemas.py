@@ -10,7 +10,7 @@ class SignalFeatures(BaseModel):
     payment_consistency: float = Field(ge=0, le=100)
     savings_ratio: float = Field(ge=0, le=1)
     expense_ratio: float = Field(ge=0, le=1.5)
-    late_bill_count: float = Field(ge=0, le=10)
+    late_bill_count: float = Field(ge=0, le=12)
     recharge_frequency: float = Field(ge=0, le=15)
     upi_transactions: float = Field(ge=0, le=600)
     wallet_transactions: float = Field(ge=0, le=120)
@@ -132,12 +132,40 @@ class Simulation(BaseModel):
     series: list[ProjectionPoint]
     disclaimer: str
 
+class AssessmentProfileInput(BaseModel):
+    name: str = "You"
+    role: str
+    city: str
+    monthly_income: float = Field(gt=0)
+    monthly_expenses: float = Field(ge=0)
+    monthly_surplus: float = Field(ge=0)
+    emergency_fund_months: float = Field(ge=0, le=18)
+    income_stability: int = Field(ge=1, le=5)
+    consent_sources: list[str] = Field(
+        default_factory=lambda: ["self-reported questionnaire"]
+    )
+
+
 class FullAssessmentRequest(BaseModel):
-    profile_id: str
+    profile_id: str | None = None
+    features: SignalFeatures | None = None
+    profile: AssessmentProfileInput | None = None
     monthly_amount: int = Field(ge=500, le=5000, multiple_of=100)
     years: int = Field(ge=1, le=5)
     risk_profile: RiskProfileRequest
     persist: bool = True
+
+    @model_validator(mode="after")
+    def validate_assessment_source(self):
+        if self.features is None and not self.profile_id:
+            raise ValueError("Provide profile_id or custom features.")
+
+        if self.features is not None and self.profile is None:
+            raise ValueError(
+                "Custom profile summary is required with custom features."
+            )
+
+        return self
 
 class FullAssessment(BaseModel):
     profile: ProfileSummary

@@ -166,21 +166,33 @@ export async function runRiskProfile(payload: RiskProfilePayload) {
   }
 }
 
+export async function scoreRawWithMode(
+  features: Record<string, number>,
+): Promise<{ data: ScoreResult; fallback: boolean }> {
+  try {
+    return {
+      data: await call<ScoreResult>("/score", {
+        method: "POST",
+        body: JSON.stringify({
+          profile_id: "questionnaire-user",
+          features,
+        }),
+      }),
+      fallback: false,
+    };
+  } catch (error) {
+    if (!allowDemoFallback) throw error;
+    return {
+      data: scoreRawFallback(features),
+      fallback: true,
+    };
+  }
+}
+
 export async function scoreRaw(
   features: Record<string, number>,
 ): Promise<ScoreResult> {
-  try {
-    return await call<ScoreResult>("/score", {
-      method: "POST",
-      body: JSON.stringify({
-        profile_id: "questionnaire-user",
-        features,
-      }),
-    });
-  } catch (error) {
-    if (!allowDemoFallback) throw error;
-    return scoreRawFallback(features);
-  }
+  return (await scoreRawWithMode(features)).data;
 }
 
 function scoreRawFallback(features: Record<string, number>): ScoreResult {

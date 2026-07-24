@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, TrendingUp, Trophy, Wallet, AlertTriangle, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, TrendingUp, Trophy, Wallet, AlertTriangle, Sparkles, CalendarDays, Microscope, ShieldCheck } from "lucide-react";
 import { ScoreOrbit } from "@/components/ui/score-orbit";
 import { ProjectionChart } from "@/components/ui/projection-chart";
 import { Loading } from "@/components/ui/loading";
 import { hasQuestionnaireData, loadAnswers, loadResult, loadRecommendation, loadSimulation, getUserProfile } from "@/lib/questionnaire-store";
 import type { ScoreResult, Recommendation, Simulation, QuestionnaireAnswers } from "@/lib/types";
+import { build30DayPlan } from "@/lib/improvement-plan";
 const money = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 const signalLabels: Record<string, string> = {
@@ -65,6 +66,7 @@ export function DashboardClient() {
     ? Object.fromEntries(score.top_drivers.map(d => [d.feature, d.value]))
     : {};
   const visibleFeatures = Object.entries(features).filter(([k]) => k in signalLabels);
+  const actionPlan = build30DayPlan(score, answers);
 
   return (
     <main className="product-main">
@@ -123,6 +125,27 @@ export function DashboardClient() {
           <strong>{score.confidence}%</strong>
           <small>Model certainty</small>
         </div>
+      </section>
+
+      <section className="winning-upgrade-grid">
+        <article className="winning-upgrade-card improve">
+          <Microscope size={20} />
+          <span>INTERACTIVE IMPROVEMENT LAB</span>
+          <h3>Change habits. Re-run the same model.</h3>
+          <p>Test savings, expenses and late-payment scenarios against your current score.</p>
+          <Link href="/app/improve" className="button-primary small">
+            Open Improvement Lab <ArrowRight size={14} />
+          </Link>
+        </article>
+        <article className="winning-upgrade-card evidence">
+          <ShieldCheck size={20} />
+          <span>MODEL EVIDENCE</span>
+          <h3>Metrics and limitations stay visible.</h3>
+          <p>Review training data, MAE, R², feature importance and responsible-use boundaries.</p>
+          <Link href="/model-transparency" className="button-ghost">
+            Model Transparency <ArrowRight size={14} />
+          </Link>
+        </article>
       </section>
 
       {visibleFeatures.length > 0 && (
@@ -197,6 +220,28 @@ export function DashboardClient() {
           </div>
         </section>
       )}
+
+      <section className="product-card" style={{ marginTop: 13 }}>
+        <div className="card-heading">
+          <div>
+            <span>30-DAY ACTION PLAN</span>
+            <h3>Four weeks. Four measurable moves.</h3>
+            <p>Turn model explanations into a simple routine you can actually follow.</p>
+          </div>
+          <CalendarDays size={19} />
+        </div>
+        <div className="action-roadmap">
+          {actionPlan.map((week) => (
+            <article key={week.week}>
+              <span>WEEK {week.week}</span>
+              <strong>{week.title}</strong>
+              <p>{week.action}</p>
+              <small>{week.target}</small>
+              {week.potentialGain ? <b>Up to +{week.potentialGain} pts</b> : null}
+            </article>
+          ))}
+        </div>
+      </section>
 
       {simulation && (
         <section className="product-grid wide-left" style={{ marginTop: 13 }}>

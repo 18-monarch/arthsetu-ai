@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ArrowLeft, Check, Loader2, Trophy, AlertTriangle, TrendingUp, ShieldCheck, Wallet, ChevronRight } from "lucide-react";
+import { ArrowRight, ArrowLeft, Check, Loader2, Trophy, AlertTriangle, TrendingUp, ShieldCheck, Wallet, ChevronRight, Database, LockKeyhole, Eye } from "lucide-react";
 import Link from "next/link";
 import type { QuestionnaireAnswers, ScoreResult, Recommendation, Simulation } from "@/lib/types";
 import { questions, answersToFeatures, TOTAL_PHASES } from "@/lib/questionnaire-map";
@@ -227,6 +227,8 @@ export function QuestionnaireClient() {
   const [sim, setSim] = useState<Simulation | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [accountReady, setAccountReady] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -338,6 +340,63 @@ export function QuestionnaireClient() {
 
   if (result) {
     return <ResultPage result={result} answers={answers} recommendation={rec} simulation={sim} />;
+  }
+
+  if (!consentAccepted) {
+    return (
+      <section className="consent-start-card">
+        <div className="consent-start-head">
+          <div>
+            <span>BEFORE WE BEGIN</span>
+            <h2>Your answers remain understandable and under your control.</h2>
+            <p>
+              ArthSetu uses self-reported answers to create an educational
+              financial-readiness score and improvement path.
+            </p>
+          </div>
+          <ShieldCheck size={26} />
+        </div>
+
+        <div className="consent-start-grid">
+          <article>
+            <Database size={18} />
+            <strong>What we use</strong>
+            <span>Income, expenses, savings, payment habits and digital activity.</span>
+          </article>
+          <article>
+            <LockKeyhole size={18} />
+            <strong>What we never ask</strong>
+            <span>No Aadhaar, UPI PIN, bank password or raw statement.</span>
+          </article>
+          <article>
+            <Eye size={18} />
+            <strong>What you receive</strong>
+            <span>SetuScore, top reasons, improvement actions and an educational plan.</span>
+          </article>
+        </div>
+
+        <label className="consent-confirmation">
+          <input
+            type="checkbox"
+            checked={consentChecked}
+            onChange={(event) => setConsentChecked(event.target.checked)}
+          />
+          <span>
+            I understand this is an educational prototype—not an official credit
+            score, loan decision or regulated investment recommendation.
+          </span>
+        </label>
+
+        <button
+          className="button-primary"
+          type="button"
+          disabled={!consentChecked}
+          onClick={() => setConsentAccepted(true)}
+        >
+          I Agree — Start Questionnaire <ArrowRight size={15} />
+        </button>
+      </section>
+    );
   }
 
   return (
