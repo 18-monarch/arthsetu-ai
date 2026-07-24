@@ -3,12 +3,21 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, LockKeyhole, Mail, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  LockKeyhole,
+  Mail,
+  UserRound,
+} from "lucide-react";
 
 import { authClient } from "@/lib/auth/client";
-import { hasQuestionnaireData } from "@/lib/questionnaire-store";
+import { releaseActiveAccount } from "@/lib/questionnaire-store";
 
-export function AuthForm({ mode }: { mode: "login" | "signup" }) {
+export function AuthForm({
+  mode,
+}: {
+  mode: "login" | "signup";
+}) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18,43 +27,46 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setError("");
     setBusy(true);
 
+    // Disconnect the previous browser cache before changing identity.
+    releaseActiveAccount();
+
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") || "").trim();
     const password = String(data.get("password") || "");
     const name = String(data.get("name") || "").trim();
-
-    // New users and users on a fresh browser must complete onboarding first.
-    // Returning users who already completed it can continue to the dashboard.
-    const destination = hasQuestionnaireData()
-      ? "/app/dashboard"
-      : "/questionnaire";
 
     try {
       if (mode === "login") {
         const result = await authClient.signIn.email({
           email,
           password,
-          callbackURL: destination,
+          callbackURL: "/app/dashboard",
         });
 
         if (result.error) {
           throw new Error(result.error.message);
         }
+
+        // The product gate now checks this account's Neon state. New
+        // accounts go to the questionnaire; returning accounts restore
+        // only their own saved profile.
+        router.replace("/app/dashboard");
+        router.refresh();
       } else {
         const result = await authClient.signUp.email({
           name,
           email,
           password,
-          callbackURL: destination,
+          callbackURL: "/questionnaire",
         });
 
         if (result.error) {
           throw new Error(result.error.message);
         }
-      }
 
-      router.replace(destination);
-      router.refresh();
+        router.replace("/questionnaire");
+        router.refresh();
+      }
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -75,7 +87,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             <UserRound size={16} />
             <input
               name="name"
-              placeholder="Mohit Chaudhari"
+              placeholder="Your name"
               required
               minLength={2}
             />
@@ -112,7 +124,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
       {error && <p className="form-error">{error}</p>}
 
-      <button className="button-primary auth-submit" disabled={busy}>
+      <button
+        className="button-primary auth-submit"
+        disabled={busy}
+      >
         {busy
           ? "Please wait…"
           : mode === "login"

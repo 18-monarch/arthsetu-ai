@@ -6,16 +6,47 @@ import type {
   Simulation,
 } from "@/lib/types";
 
-const ANSWERS_KEY = "arthsetu:questionnaire-answers";
-const RESULT_KEY = "arthsetu:questionnaire-result";
-const RISK_KEY = "arthsetu:questionnaire-risk";
-const RECOMMENDATION_KEY = "arthsetu:questionnaire-recommendation";
-const SIMULATION_KEY = "arthsetu:questionnaire-simulation";
-const HISTORY_KEY = "arthsetu:assessment-history";
+const ACTIVE_SCOPE_KEY = "arthsetu:active-data-scope";
+const LEGACY_KEYS = [
+  "arthsetu:questionnaire-answers",
+  "arthsetu:questionnaire-result",
+  "arthsetu:questionnaire-risk",
+  "arthsetu:questionnaire-recommendation",
+  "arthsetu:questionnaire-simulation",
+  "arthsetu:assessment-history",
+] as const;
+
+const ANSWERS_KEY = "questionnaire-answers";
+const RESULT_KEY = "questionnaire-result";
+const RISK_KEY = "questionnaire-risk";
+const RECOMMENDATION_KEY = "questionnaire-recommendation";
+const SIMULATION_KEY = "questionnaire-simulation";
+const HISTORY_KEY = "assessment-history";
 
 export interface StoredResult {
   score: ScoreResult;
   features: Record<string, number>;
+}
+
+export interface AccountQuestionnaireState {
+  answers: QuestionnaireAnswers;
+  features: Record<string, number>;
+  score: ScoreResult;
+  risk: RiskProfilePayload;
+  recommendation: Recommendation;
+  simulation: Simulation;
+  profile?: Record<string, unknown>;
+  saved_at?: string;
+}
+
+export interface AccountStateResponse {
+  authenticated: boolean;
+  user: {
+    id: string;
+    email?: string | null;
+    name?: string | null;
+  } | null;
+  state: AccountQuestionnaireState | null;
 }
 
 function isScoreResult(value: unknown): value is ScoreResult {
@@ -31,22 +62,66 @@ function isScoreResult(value: unknown): value is ScoreResult {
   );
 }
 
+function safeParse<T>(raw: string | null): T | null {
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function sanitiseScope(scope: string) {
+  return scope.replace(/[^a-zA-Z0-9:_-]/g, "_");
+}
+
+function currentScope() {
+  if (typeof window === "undefined") return "server";
+  return localStorage.getItem(ACTIVE_SCOPE_KEY) || "guest";
+}
+
+function storageKey(name: string) {
+  return `arthsetu:${sanitiseScope(currentScope())}:${name}`;
+}
+
+function removeLegacyUnscopedData() {
+  if (typeof window === "undefined") return;
+
+  // Never migrate old unscoped data into a signed-in account. That old
+  // behaviour is exactly what caused one user to see another user's results.
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+}
+
+export function activateAccountScope(userId: string) {
+  if (typeof window === "undefined") return;
+  removeLegacyUnscopedData();
+  localStorage.setItem(ACTIVE_SCOPE_KEY, `user:${userId}`);
+}
+
+export function activateDemoScope() {
+  if (typeof window === "undefined") return;
+  removeLegacyUnscopedData();
+  localStorage.setItem(ACTIVE_SCOPE_KEY, "demo");
+}
+
+export function releaseActiveAccount() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(ACTIVE_SCOPE_KEY);
+}
+
 export function saveAnswers(answers: QuestionnaireAnswers) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(ANSWERS_KEY, JSON.stringify(answers));
+  localStorage.setItem(storageKey(ANSWERS_KEY), JSON.stringify(answers));
 }
 
 export function loadAnswers(): QuestionnaireAnswers | null {
   if (typeof window === "undefined") return null;
-
-  const raw = localStorage.getItem(ANSWERS_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as QuestionnaireAnswers;
-  } catch {
-    return null;
-  }
+  return safeParse<QuestionnaireAnswers>(
+    localStorage.getItem(storageKey(ANSWERS_KEY)),
+  );
 }
 
 export function saveResult(data: {
@@ -63,21 +138,24 @@ export function saveResult(data: {
     features: data.features,
   };
 
-  localStorage.setItem(RESULT_KEY, JSON.stringify(storedResult));
-  localStorage.setItem(RISK_KEY, JSON.stringify(data.risk));
   localStorage.setItem(
-    RECOMMENDATION_KEY,
+    storageKey(RESULT_KEY),
+    JSON.stringify(storedResult),
+  );
+  localStorage.setItem(storageKey(RISK_KEY), JSON.stringify(data.risk));
+  localStorage.setItem(
+    storageKey(RECOMMENDATION_KEY),
     JSON.stringify(data.recommendation),
   );
-  localStorage.setItem(SIMULATION_KEY, JSON.stringify(data.simulation));
+  localStorage.setItem(
+    storageKey(SIMULATION_KEY),
+    JSON.stringify(data.simulation),
+  );
 
-  let history: unknown[] = [];
-  try {
-    history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]") as unknown[];
-    if (!Array.isArray(history)) history = [];
-  } catch {
-    history = [];
-  }
+  const history =
+    safeParse<unknown[]>(
+      localStorage.getItem(storageKey(HISTORY_KEY)),
+    ) || [];
 
   const entry = {
     id: crypto.randomUUID(),
@@ -95,82 +173,144 @@ export function saveResult(data: {
   };
 
   localStorage.setItem(
-    HISTORY_KEY,
+    storageKey(HISTORY_KEY),
     JSON.stringify([entry, ...history].slice(0, 50)),
   );
+}
+
+export function hydrateAccountState(state: AccountQuestionnaireState) {
+  if (typeof window === "undefined") return;
+
+  saveAnswers(state.answers);
+  localStorage.setItem(
+    storageKey(RESULT_KEY),
+    JSON.stringify({
+      score: state.score,
+      features: state.features,
+    } satisfies StoredResult),
+  );
+  localStorage.setItem(storageKey(RISK_KEY), JSON.stringify(state.risk));
+  localStorage.setItem(
+    storageKey(RECOMMENDATION_KEY),
+    JSON.stringify(state.recommendation),
+  );
+  localStorage.setItem(
+    storageKey(SIMULATION_KEY),
+    JSON.stringify(state.simulation),
+  );
+}
+
+export async function syncAccountState(): Promise<AccountStateResponse> {
+  if (typeof window === "undefined") {
+    return {
+      authenticated: false,
+      user: null,
+      state: null,
+    };
+  }
+
+  // Remove the previous account pointer before asking the server who is
+  // currently signed in. This prevents stale data being displayed if a
+  // request fails or a different user logs in on the same browser.
+  releaseActiveAccount();
+
+  const response = await fetch("/api/account-state", {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Unable to load account data (${response.status}).`);
+  }
+
+  const payload = (await response.json()) as AccountStateResponse;
+
+  if (payload.authenticated && payload.user?.id) {
+    activateAccountScope(payload.user.id);
+
+    if (payload.state) {
+      hydrateAccountState(payload.state);
+    } else {
+      clearAll();
+    }
+  } else {
+    activateDemoScope();
+  }
+
+  return payload;
 }
 
 export function loadResult(): StoredResult | null {
   if (typeof window === "undefined") return null;
 
-  const raw = localStorage.getItem(RESULT_KEY);
-  if (!raw) return null;
+  const parsed = safeParse<unknown>(
+    localStorage.getItem(storageKey(RESULT_KEY)),
+  );
 
-  try {
-    const parsed = JSON.parse(raw) as unknown;
+  if (parsed && typeof parsed === "object") {
+    const candidate = parsed as Partial<StoredResult>;
 
-    // Current format: { score: ScoreResult, features: Record<string, number> }
-    if (parsed && typeof parsed === "object") {
-      const candidate = parsed as Partial<StoredResult>;
-      if (isScoreResult(candidate.score)) {
-        return {
-          score: candidate.score,
-          features:
-            candidate.features && typeof candidate.features === "object"
-              ? candidate.features
-              : {},
-        };
-      }
-    }
-
-    // Legacy format used by the first production build: ScoreResult directly.
-    // Migrate it silently so existing users do not hit a dashboard crash.
-    if (isScoreResult(parsed)) {
-      const migrated: StoredResult = {
-        score: parsed,
-        features: {},
+    if (isScoreResult(candidate.score)) {
+      return {
+        score: candidate.score,
+        features:
+          candidate.features && typeof candidate.features === "object"
+            ? candidate.features
+            : {},
       };
-      localStorage.setItem(RESULT_KEY, JSON.stringify(migrated));
-      return migrated;
     }
-
-    return null;
-  } catch {
-    return null;
   }
+
+  if (isScoreResult(parsed)) {
+    const migrated: StoredResult = {
+      score: parsed,
+      features: {},
+    };
+
+    localStorage.setItem(
+      storageKey(RESULT_KEY),
+      JSON.stringify(migrated),
+    );
+
+    return migrated;
+  }
+
+  return null;
 }
 
 export function loadRisk(): RiskProfilePayload | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(RISK_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as RiskProfilePayload;
-  } catch {
-    return null;
-  }
+  return safeParse<RiskProfilePayload>(
+    localStorage.getItem(storageKey(RISK_KEY)),
+  );
 }
 
 export function loadRecommendation(): Recommendation | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(RECOMMENDATION_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Recommendation;
-  } catch {
-    return null;
-  }
+  return safeParse<Recommendation>(
+    localStorage.getItem(storageKey(RECOMMENDATION_KEY)),
+  );
 }
 
 export function loadSimulation(): Simulation | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(SIMULATION_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Simulation;
-  } catch {
-    return null;
-  }
+  return safeParse<Simulation>(
+    localStorage.getItem(storageKey(SIMULATION_KEY)),
+  );
+}
+
+export function loadLocalHistory() {
+  if (typeof window === "undefined") return [];
+  return (
+    safeParse<unknown[]>(
+      localStorage.getItem(storageKey(HISTORY_KEY)),
+    ) || []
+  );
+}
+
+export function clearLocalHistory() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(storageKey(HISTORY_KEY));
 }
 
 export function hasQuestionnaireData(): boolean {
@@ -180,11 +320,13 @@ export function hasQuestionnaireData(): boolean {
 
 export function clearAll() {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(ANSWERS_KEY);
-  localStorage.removeItem(RESULT_KEY);
-  localStorage.removeItem(RISK_KEY);
-  localStorage.removeItem(RECOMMENDATION_KEY);
-  localStorage.removeItem(SIMULATION_KEY);
+
+  localStorage.removeItem(storageKey(ANSWERS_KEY));
+  localStorage.removeItem(storageKey(RESULT_KEY));
+  localStorage.removeItem(storageKey(RISK_KEY));
+  localStorage.removeItem(storageKey(RECOMMENDATION_KEY));
+  localStorage.removeItem(storageKey(SIMULATION_KEY));
+  localStorage.removeItem(storageKey(HISTORY_KEY));
 }
 
 export function getUserProfile(answers: QuestionnaireAnswers) {
@@ -203,7 +345,8 @@ export function getUserProfile(answers: QuestionnaireAnswers) {
 
   return {
     name: "You",
-    role: occupation.charAt(0).toUpperCase() + occupation.slice(1),
+    role:
+      occupation.charAt(0).toUpperCase() + occupation.slice(1),
     city:
       answers.city_tier === "metro"
         ? "Metro City"

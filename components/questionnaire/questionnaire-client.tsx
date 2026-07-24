@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, ArrowLeft, Check, Loader2, Trophy, AlertTriangle, TrendingUp, ShieldCheck, Wallet, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -8,7 +8,13 @@ import type { QuestionnaireAnswers, ScoreResult, Recommendation, Simulation } fr
 import { questions, answersToFeatures, TOTAL_PHASES } from "@/lib/questionnaire-map";
 import type { QuestionDef } from "@/lib/questionnaire-map";
 import { ScoreOrbit } from "@/components/ui/score-orbit";
-import { saveAnswers, saveResult } from "@/lib/questionnaire-store";
+import {
+  loadAnswers,
+  saveAnswers,
+  saveResult,
+  syncAccountState,
+} from "@/lib/questionnaire-store";
+import { Loading } from "@/components/ui/loading";
 
 type Phase = { label: string; questions: QuestionDef[] };
 
@@ -220,6 +226,35 @@ export function QuestionnaireClient() {
   const [rec, setRec] = useState<Recommendation | undefined>(undefined);
   const [sim, setSim] = useState<Simulation | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [accountReady, setAccountReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function initialiseAccount() {
+      try {
+        await syncAccountState();
+
+        if (!active) return;
+
+        const existingAnswers = loadAnswers();
+        if (existingAnswers) {
+          setAnswers(existingAnswers);
+        }
+      } catch {
+        // The user can still answer the questionnaire. Submission will
+        // surface any secure account-persistence issue.
+      } finally {
+        if (active) setAccountReady(true);
+      }
+    }
+
+    initialiseAccount();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const phases = useMemo(() => {
     const map = new Map<number, QuestionDef[]>();
@@ -253,17 +288,32 @@ export function QuestionnaireClient() {
     setLoading(true);
     setError(null);
     try {
-      const { features, risk, profile_summary } = answersToFeatures(answers);
+      const {
+        features,
+        risk,
+      } = answersToFeatures(answers);
+
       const resp = await fetch("/api/submit-questionnaire", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ features, risk, profile: profile_summary }),
+        body: JSON.stringify({ answers }),
       });
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
         throw new Error(body.detail || `Request failed (${resp.status})`);
       }
       const data = await resp.json();
+
+      if (
+        data._meta &&
+        data._meta.persistence_error &&
+        !data._meta.persisted
+      ) {
+        throw new Error(
+          `Your score was generated, but account saving failed: ${data._meta.persistence_error}`,
+        );
+      }
+
       saveAnswers(answers);
       saveResult({
         score: data.score,
@@ -280,6 +330,10 @@ export function QuestionnaireClient() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (!accountReady) {
+    return <Loading />;
   }
 
   if (result) {

@@ -1,0 +1,55 @@
+ARTHSETU — ACCOUNT-SPECIFIC DATA HOTFIX
+==========================================
+
+ROOT CAUSE
+The old application used global localStorage keys. A second account on the
+same browser could therefore inherit the first account's answers and score.
+
+THIS PATCH CHANGES THE DATA FLOW
+1. Every authenticated user is identified by Neon Auth user ID.
+2. Questionnaire answers and results are saved into the existing
+   assessment_runs table with profile_key = account-questionnaire.
+3. /api/account-state restores only the currently authenticated user's row.
+4. Browser cache keys are namespaced by user ID.
+5. Old unscoped dummy/global browser data is deliberately deleted.
+6. On sign-out, visible browser data is cleared; the account's Neon data stays.
+7. A completely new account receives a blank questionnaire.
+8. Returning accounts receive only their own saved data.
+
+NO SQL MIGRATION IS REQUIRED
+The existing assessment_runs and consent_events tables are reused.
+
+COPY THESE FILES INTO THE EXISTING PROJECT
+- lib/questionnaire-store.ts
+- app/api/account-state/route.ts
+- app/api/submit-questionnaire/route.ts
+- components/app/onboarding-gate.tsx
+- app/app/layout.tsx
+- components/auth/auth-form.tsx
+- components/app/sign-out-button.tsx
+- components/app/history-client.tsx
+- components/questionnaire/questionnaire-client.tsx
+
+THEN RUN
+npm run build
+
+git add .
+git commit -m "Store questionnaire data per Neon account"
+git pull --rebase origin main
+git push origin main
+
+TEST
+1. Sign out.
+2. Open an Incognito window.
+3. Create Account A and complete the questionnaire.
+4. Sign out.
+5. Create Account B.
+6. Account B must see the blank questionnaire, never Account A's score.
+7. Sign back into Account A.
+8. Account A's own saved state must be restored from Neon.
+
+NEON VERIFICATION
+Open assessment_runs and filter:
+profile_key = account-questionnaire
+
+Each row's user_id must match the corresponding Neon Auth user.

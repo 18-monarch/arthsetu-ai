@@ -14,10 +14,14 @@ export default async function ProductLayout({
   children: React.ReactNode;
 }) {
   const store = await cookies();
-  const demoCookie = store.get("arthsetu_demo")?.value === "1";
+  const demoCookie =
+    store.get("arthsetu_demo")?.value === "1";
   const configured = neonAuthConfigured();
 
-  let user: { email?: string | null; name?: string | null } | null = null;
+  let user: {
+    email?: string | null;
+    name?: string | null;
+  } | null = null;
 
   if (configured) {
     try {
