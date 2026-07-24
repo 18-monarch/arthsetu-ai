@@ -151,6 +151,8 @@ export function ImprovementLabClient() {
   }
 
   function reset() {
+    if (!baseFeatures) return;
+
     setSavingsRatio(baseFeatures.savings_ratio ?? 0.2);
     setExpenseRatio(baseFeatures.expense_ratio ?? 0.75);
     setLateBills(Math.round(baseFeatures.late_bill_count ?? 1));
