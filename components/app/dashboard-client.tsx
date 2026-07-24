@@ -60,6 +60,7 @@ export function DashboardClient() {
   if (!hasData || !score || !answers) return <NoDataState />;
 
   const profile = getUserProfile(answers);
+  const safeRiskBucket = score.risk_bucket || "Pending";
   const features = score.top_drivers?.length > 0
     ? Object.fromEntries(score.top_drivers.map(d => [d.feature, d.value]))
     : {};
@@ -80,9 +81,9 @@ export function DashboardClient() {
         <div className="command-copy">
           <span>YOUR SETUSCORE</span>
           <h2>{score.score}</h2>
-          <p>{score.risk_bucket} risk · {score.confidence}% confidence</p>
+          <p>{safeRiskBucket} risk · {score.confidence}% confidence</p>
           <div style={{ marginTop: 16 }}>
-            <ScoreOrbit score={score.score} risk={score.risk_bucket} confidence={score.confidence} />
+            <ScoreOrbit score={score.score} risk={safeRiskBucket} confidence={score.confidence} />
           </div>
         </div>
         <div className="command-visual">
@@ -91,7 +92,7 @@ export function DashboardClient() {
           <div className="score-core">
             <span>SETUSCORE</span>
             <strong>{score.score}</strong>
-            <small>{score.risk_bucket.toUpperCase()} RISK · {score.confidence}%</small>
+            <small>{safeRiskBucket.toUpperCase()} RISK · {score.confidence}%</small>
             <i />
           </div>
         </div>
