@@ -14,7 +14,7 @@ Next.js 16 + React 19 + TypeScript + Route Handlers
           |
           +---- Neon PostgreSQL + Drizzle ORM (optional)
           |
-          +---- Vercel FastAPI + teammate ML model
+          +---- Vercel FastAPI + ML model
           |
           +---- Gamified Questionnaire → ML Scoring → Dashboard
 ```
