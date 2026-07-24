@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app/app-shell";
+import { OnboardingGate } from "@/components/app/onboarding-gate";
 import { auth } from "@/lib/auth/server";
 import { neonAuthConfigured } from "@/lib/env";
 
@@ -39,7 +40,7 @@ export default async function ProductLayout({
 
   return (
     <AppShell user={user} demo={demoCookie || !configured}>
-      {children}
+      <OnboardingGate>{children}</OnboardingGate>
     </AppShell>
   );
 }

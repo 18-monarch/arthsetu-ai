@@ -6,17 +6,16 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, LockKeyhole, Mail, UserRound } from "lucide-react";
 
 import { authClient } from "@/lib/auth/client";
+import { hasQuestionnaireData } from "@/lib/questionnaire-store";
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setMessage("");
     setBusy(true);
 
     const data = new FormData(event.currentTarget);
@@ -24,36 +23,38 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     const password = String(data.get("password") || "");
     const name = String(data.get("name") || "").trim();
 
+    // New users and users on a fresh browser must complete onboarding first.
+    // Returning users who already completed it can continue to the dashboard.
+    const destination = hasQuestionnaireData()
+      ? "/app/dashboard"
+      : "/questionnaire";
+
     try {
       if (mode === "login") {
         const result = await authClient.signIn.email({
           email,
           password,
-          callbackURL: "/app/dashboard",
+          callbackURL: destination,
         });
 
         if (result.error) {
           throw new Error(result.error.message);
         }
-
-        router.replace("/app/dashboard");
-        router.refresh();
       } else {
         const result = await authClient.signUp.email({
           name,
           email,
           password,
-          callbackURL: "/app/dashboard",
+          callbackURL: destination,
         });
 
         if (result.error) {
           throw new Error(result.error.message);
         }
-
-        setMessage(
-          "Account created. Continue to sign in if email verification is enabled.",
-        );
       }
+
+      router.replace(destination);
+      router.refresh();
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -110,14 +111,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       </label>
 
       {error && <p className="form-error">{error}</p>}
-      {message && <p className="form-success">{message}</p>}
 
       <button className="button-primary auth-submit" disabled={busy}>
         {busy
           ? "Please wait…"
           : mode === "login"
-            ? "Sign in to ArthSetu"
-            : "Create ArthSetu account"}
+            ? "Sign in and continue"
+            : "Create account and begin"}
         <ArrowRight size={14} />
       </button>
 
